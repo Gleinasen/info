@@ -500,27 +500,48 @@
   </div>
 </div>
 
-<script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <script>
   const dagNavn  = ['Søndag','Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag'];
   const maaneder = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
 
-  // ── LAGRING PER DATO ──────────────────────────────────────────
-  const STORAGE_KEY = 'gleinasen_plan';
+  // ── FIREBASE OPPSETT ──────────────────────────────────────────
+  const firebaseConfig = {
+    apiKey: "AIzaSyAOGwoeVm4H6Fh0GRVWUNve-IdCmJnpD1s",
+    authDomain: "gleinasen.firebaseapp.com",
+    projectId: "gleinasen",
+    storageBucket: "gleinasen.firebasestorage.app",
+    messagingSenderId: "1012896704332",
+    appId: "1:1012896704332:web:a8c10912fa7df7a6fd11e9",
+    databaseURL: "https://gleinasen-default-rtdb.europe-west1.firebasedatabase.app"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
   let bakkeFarge = 'grønn';
 
-  function lastePlaner() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-    catch(e) { return {}; }
-  }
-
   function lagrePlan(dato, data) {
-    const planer = lastePlaner();
-    planer[dato] = data;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(planer));
+    db.ref('planer/' + dato).set(data);
   }
 
-  function hentPlanForDato(dato) {
-    return lastePlaner()[dato] || null;
+  function hentPlanForDato(dato, callback) {
+    db.ref('planer/' + dato).once('value').then(snap => {
+      callback(snap.val());
+    });
+  }
+
+  // Lytter på endringer i sanntid — oppdaterer forsiden automatisk
+  function lyttPaaDato(dato) {
+    db.ref('planer/' + dato).on('value', snap => {
+      const plan = snap.val();
+      if (plan) {
+        fyllAdminSkjema(plan);
+        oppdaterKort();
+      }
+    });
   }
 
   function lesAdminSkjema() {
@@ -571,7 +592,7 @@
     if (!dato) { alert('Velg en dato først'); return; }
     lagrePlan(dato, lesAdminSkjema());
     oppdaterKort();
-    alert('Lagret for ' + dato);
+    alert('Lagret! Alle enheter oppdateres nå automatisk.');
   }
 
   // ── DATO ──────────────────────────────────────────────────────
@@ -583,9 +604,10 @@
     const datStr = valgt.getDate() + '. ' + maaneder[valgt.getMonth()] + ' ' + valgt.getFullYear();
     document.getElementById('admin-dato-preview').textContent = dagStr + ' ' + datStr;
 
-    // Load saved plan for this date into admin form
-    const plan = hentPlanForDato(datoVal);
-    if (plan) fyllAdminSkjema(plan);
+    // Last inn lagret plan for denne datoen fra Firebase
+    hentPlanForDato(datoVal, function(plan) {
+      if (plan) fyllAdminSkjema(plan);
+    });
 
     // Neste apning on forside
     const datoAktiv = document.getElementById('dato-aktiv').checked;
@@ -624,10 +646,9 @@
     const now = new Date();
     document.getElementById('day').textContent  = dagNavn[now.getDay()];
     document.getElementById('date').textContent = now.getDate() + '. ' + maaneder[now.getMonth()] + ' ' + now.getFullYear();
-    // Auto-load today's plan
-    const todayISO  = now.toISOString().split('T')[0];
-    const todayPlan = hentPlanForDato(todayISO);
-    if (todayPlan) fyllAdminSkjema(todayPlan);
+    // Lytt på dagens plan i sanntid fra Firebase
+    const todayISO = now.toISOString().split('T')[0];
+    lyttPaaDato(todayISO);
     oppdaterKort();
     oppdaterDato();
   }
@@ -635,6 +656,8 @@
   // Init
   document.getElementById('admin-dato').value = new Date().toISOString().split('T')[0];
   oppdaterDato();
+  // Start sanntidslytter for dagens dato
+  lyttPaaDato(new Date().toISOString().split('T')[0]);
 
   function oppdaterKort() {
     const now = new Date();
