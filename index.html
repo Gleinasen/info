@@ -659,10 +659,7 @@
   // Start sanntidslytter for dagens dato
   lyttPaaDato(new Date().toISOString().split('T')[0]);
 
-  // Sanntidslytter for sesongstatus
-  db.ref('sesong').on('value', snap => {
-    if (snap.val()) visSesong(snap.val());
-  });
+
 
   function oppdaterKort() {
     const now = new Date();
@@ -1048,6 +1045,11 @@
     }
   }
   function lukkOverlay() { document.getElementById('pw-overlay').style.display = 'none'; }
+
+  // Sanntidslytter for sesongstatus
+  db.ref('sesong').on('value', function(snap) {
+    if (snap.val()) visSesong(snap.val());
+  });
 
   update();
   setInterval(update, 60000);
