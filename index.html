@@ -659,6 +659,11 @@
   // Start sanntidslytter for dagens dato
   lyttPaaDato(new Date().toISOString().split('T')[0]);
 
+  // Sanntidslytter for sesongstatus
+  db.ref('sesong').on('value', snap => {
+    if (snap.val()) visSesong(snap.val());
+  });
+
   function oppdaterKort() {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -965,25 +970,45 @@
   }
 
   function oppdaterSesong() {
-    const slutt = document.getElementById('sesong-toggle').checked;
+    const slutt   = document.getElementById('sesong-toggle').checked;
     const visInfo = document.getElementById('sesonginfo-toggle').checked;
 
-    document.getElementById('sesong-slutt').classList.toggle('active', slutt);
-    document.getElementById('forside-innhold').style.display = slutt ? 'none' : 'flex';
+    const sesongData = {
+      slutt:    slutt,
+      visInfo:  visInfo,
+      driftstimer:   document.getElementById('s-driftstimer').value   || '',
+      topp:          document.getElementById('s-topp').value          || '',
+      avstigning:    document.getElementById('s-avstigning').value    || '',
+      besokende:     document.getElementById('s-besøkende').value     || '',
+      utlan:         document.getElementById('s-utlan').value         || '',
+      grasrotAntall: document.getElementById('s-grasrot-antall').value || '',
+      grasrotMidler: document.getElementById('s-grasrot-midler').value || '',
+      grasrotTil:    document.getElementById('s-grasrot-til').value    || ''
+    };
 
-    // Update stat values from inputs
-    document.getElementById('st-driftstimer').textContent  = document.getElementById('s-driftstimer').value  || '—';
-    document.getElementById('st-topp').textContent         = document.getElementById('s-topp').value         || '—';
-    document.getElementById('st-avstigning').textContent   = document.getElementById('s-avstigning').value   || '—';
-    document.getElementById('st-besøkende').textContent    = document.getElementById('s-besøkende').value    || '—';
-    document.getElementById('st-utlan').textContent        = document.getElementById('s-utlan').value        || '—';
-    document.getElementById('st-grasrot-antall').textContent = document.getElementById('s-grasrot-antall').value || '—';
-    document.getElementById('st-grasrot-midler').textContent = document.getElementById('s-grasrot-midler').value || '—';
-    document.getElementById('st-grasrot-til').textContent    = document.getElementById('s-grasrot-til').value    || '—';
+    // Lagre til Firebase
+    db.ref('sesong').set(sesongData);
 
-    // Show/hide stats block
+    // Vis lokalt med en gang
+    visSesong(sesongData);
+  }
+
+  function visSesong(data) {
+    if (!data) return;
+    document.getElementById('sesong-slutt').classList.toggle('active', !!data.slutt);
+    document.getElementById('forside-innhold').style.display = data.slutt ? 'none' : 'flex';
+
+    document.getElementById('st-driftstimer').textContent    = data.driftstimer  || '—';
+    document.getElementById('st-topp').textContent           = data.topp         || '—';
+    document.getElementById('st-avstigning').textContent     = data.avstigning   || '—';
+    document.getElementById('st-besøkende').textContent      = data.besokende    || '—';
+    document.getElementById('st-utlan').textContent          = data.utlan        || '—';
+    document.getElementById('st-grasrot-antall').textContent = data.grasrotAntall || '—';
+    document.getElementById('st-grasrot-midler').textContent = data.grasrotMidler || '—';
+    document.getElementById('st-grasrot-til').textContent    = data.grasrotTil   || '—';
+
     const statsEl = document.getElementById('sesong-stats');
-    if (slutt && visInfo) {
+    if (data.slutt && data.visInfo) {
       statsEl.classList.add('active');
     } else {
       statsEl.classList.remove('active');
