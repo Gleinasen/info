@@ -571,21 +571,21 @@
   // Lytter på endringer i sanntid — oppdaterer forsiden automatisk
   let aktivLytterRef = null;
   let aktivLytterDato = null;
+  let gjeldenePlan = null; // Global plan brukt av oppdaterKort
 
   function lyttPaaDato(dato) {
-    if (aktivLytterDato === dato) return; // allerede lytter på denne datoen
-    if (aktivLytterRef) aktivLytterRef.off(); // fjern gammel lytter
+    if (aktivLytterDato === dato) return;
+    if (aktivLytterRef) aktivLytterRef.off();
     aktivLytterRef = db.ref('planer/' + dato);
     aktivLytterDato = dato;
     aktivLytterRef.on('value', snap => {
       const plan = snap.val();
-      if (plan) {
-        // Fyll admin-skjema KUN hvis admin-siden er åpen
-        if (document.getElementById('page-admin').classList.contains('active')) {
-          fyllAdminSkjema(plan);
-        }
-        oppdaterKort();
+      gjeldenePlan = plan || {};
+      // Fyll admin-skjema KUN hvis admin-siden er åpen
+      if (document.getElementById('page-admin').classList.contains('active')) {
+        fyllAdminSkjema(gjeldenePlan);
       }
+      oppdaterKort();
     });
   }
 
@@ -635,7 +635,9 @@
   function lagreOgOppdater() {
     const dato = document.getElementById('admin-dato').value;
     if (!dato) { alert('Velg en dato først'); return; }
-    lagrePlan(dato, lesAdminSkjema());
+    const plan = lesAdminSkjema();
+    gjeldenePlan = plan;
+    lagrePlan(dato, plan);
     oppdaterKort();
     alert('Lagret! Alle enheter oppdateres nå automatisk.');
   }
@@ -705,14 +707,23 @@
 
 
   function oppdaterKort() {
-    const now = new Date();
+    const now    = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const todayISO  = lokalDatoISO(now);
-    const adminDato = document.getElementById('admin-dato').value || '';
-    const erRiktigDato = adminDato === todayISO;
-    const bakkAapen = erRiktigDato && nowMin >= toMin('09:00') && nowMin < toMin('22:00');
+    const todayISO = lokalDatoISO(now);
 
-    // Vis valgt dato i alle statusKort
+    // Les plan fra Firebase (global) eller fall tilbake til admin-skjema
+    const p = gjeldenePlan || {};
+    const bakke    = p.bakke    || {};
+    const skiband  = p.skiband  || {};
+    const utlan    = p.utlan    || {};
+    const pagaende = p.pagaende || {};
+    const neste    = p.neste    || {};
+
+    const adminDato    = document.getElementById('admin-dato').value || '';
+    const erRiktigDato = adminDato === todayISO;
+    const bakkAapen    = erRiktigDato && nowMin >= toMin('09:00') && nowMin < toMin('22:00');
+
+    // Dato-visning i kort
     var datoVist = '';
     if (adminDato) {
       var dd = new Date(adminDato + 'T12:00:00');
@@ -726,21 +737,21 @@
     // Datokort
     const dateCard = document.getElementById('date-card');
     if (!adminDato || adminDato > todayISO) {
-      dateCard.classList.remove('aapen');
-      dateCard.classList.add('stengt');
+      dateCard.classList.remove('aapen'); dateCard.classList.add('stengt');
     } else {
       dateCard.classList.toggle('aapen', bakkAapen);
       dateCard.classList.toggle('stengt', !bakkAapen);
     }
 
     // --- BAKKEFORHOLD ---
-    const bakkeAktiv = document.getElementById('bakke-aktiv').checked;
-    const farevarsel = document.getElementById('farevarsel');
+    const bakkeAktiv  = !!bakke.aktiv;
+    const bakkeFargeP = bakke.farge || 'grønn';
+    const farevarsel  = document.getElementById('farevarsel');
     const forsideInnhold = document.getElementById('forside-innhold');
-    const bakkekort = document.getElementById('fs-bakke-card');
+    const bakkekort   = document.getElementById('fs-bakke-card');
     const bakkeStatus = document.getElementById('fs-bakke-status');
 
-    if (bakkeAktiv && bakkeFarge === 'rød') {
+    if (bakkeAktiv && bakkeFargeP === 'rød') {
       farevarsel.classList.add('active');
       forsideInnhold.style.display = 'none';
     } else {
@@ -755,137 +766,111 @@
           'oransje': ['#ff9933', 'Oppkjørte forhold'],
           'rød':     ['#ff3333', 'Farlige forhold']
         };
-        const [farge, tekst] = fargeMap[bakkeFarge];
+        const [farge, tekst] = fargeMap[bakkeFargeP] || ['#aaa','Ukjent'];
         bakkekort.style.borderColor = farge;
-        bakkekort.style.background = farge === '#4cff91' ? '#0d2e1a' : farge === '#ffe066' ? '#2a2600' : farge === '#ff9933' ? '#2a1500' : '#2e0000';
-        bakkeStatus.style.color = farge;
-        bakkeStatus.textContent = tekst;
+        bakkekort.style.background  = farge === '#4cff91' ? '#0d2e1a' : farge === '#ffe066' ? '#2a2600' : farge === '#ff9933' ? '#2a1500' : '#2e0000';
+        bakkeStatus.style.color     = farge;
+        bakkeStatus.textContent     = tekst;
       } else if (bakkekort) {
         bakkekort.style.borderColor = 'transparent';
-        bakkekort.style.background = '#2a2a2a';
-        bakkeStatus.textContent = '';
+        bakkekort.style.background  = '#2a2a2a';
+        bakkeStatus.textContent     = '';
       }
     }
 
     // --- SKIBÅND ---
-    const skibandAktiv = document.getElementById('skiband-aktiv').checked;
-    const skibandFra   = document.getElementById('skiband-fra').value;
-    const skibandTil   = document.getElementById('skiband-til').value;
+    const skibandAktiv = !!skiband.aktiv;
+    const skibandFra   = skiband.fra || '10:00';
+    const skibandTil   = skiband.til || '19:00';
     const skibandCard  = document.getElementById('fs-skiband-card');
     const skibandStat  = document.getElementById('fs-skiband-status');
     const skibandInfo  = document.getElementById('fs-skiband-info');
-    const skibandLesMeg = document.getElementById('skiband-les-meg');
 
     if (!skibandAktiv) {
-      skibandCard.classList.remove('grønn');
-      skibandCard.classList.add('rød');
-      skibandStat.style.color = '#ff5555';
-      skibandStat.textContent = 'Stengt';
-      skibandInfo.textContent = '';
-      skibandInfo.className = 'card-info';
+      skibandCard.classList.remove('grønn'); skibandCard.classList.add('rød');
+      skibandStat.style.color = '#ff5555'; skibandStat.textContent = 'Stengt';
+      skibandInfo.textContent = ''; skibandInfo.className = 'card-info';
     } else if (!bakkAapen) {
-      skibandCard.classList.remove('grønn');
-      skibandCard.classList.add('rød');
-      skibandStat.style.color = '#ff5555';
-      skibandStat.textContent = 'Stengt';
+      skibandCard.classList.remove('grønn'); skibandCard.classList.add('rød');
+      skibandStat.style.color = '#ff5555'; skibandStat.textContent = 'Stengt';
       const minTil = toMin(skibandFra) - nowMin;
       skibandInfo.textContent = minTil > 0 ? 'Åpner om ' + formatTid(minTil) : 'Åpner ' + skibandFra;
       skibandInfo.className = 'card-info nedtelling';
     } else {
-      const erAapen = nowMin >= toMin(skibandFra) && nowMin < toMin(skibandTil);
+      const erAapen  = nowMin >= toMin(skibandFra) && nowMin < toMin(skibandTil);
       const erUtlopt = nowMin >= toMin(skibandTil);
       const gearWrap = document.getElementById('gear-wrap');
       if (erAapen) {
-        skibandCard.classList.add('grønn');
-        skibandCard.classList.remove('rød');
+        skibandCard.classList.add('grønn'); skibandCard.classList.remove('rød');
         gearWrap.classList.add('spinning');
-        skibandStat.style.color = '#4cff91';
-        skibandStat.textContent = 'Åpent';
-        const minTilStenging = toMin(skibandTil) - nowMin;
-        skibandInfo.textContent = skibandFra + ' – ' + skibandTil + '  ·  Stenger om ' + formatTid(minTilStenging);
+        skibandStat.style.color = '#4cff91'; skibandStat.textContent = 'Åpent';
+        skibandInfo.textContent = skibandFra + ' – ' + skibandTil + '  ·  Stenger om ' + formatTid(toMin(skibandTil) - nowMin);
         skibandInfo.className = 'card-info grønn-tekst';
       } else if (erUtlopt) {
-        skibandCard.classList.remove('grønn');
-        skibandCard.classList.add('rød');
+        skibandCard.classList.remove('grønn'); skibandCard.classList.add('rød');
         gearWrap.classList.remove('spinning');
-        skibandStat.style.color = '#ff5555';
-        skibandStat.textContent = 'Stengt';
+        skibandStat.style.color = '#ff5555'; skibandStat.textContent = 'Stengt';
         skibandInfo.textContent = skibandFra + ' – ' + skibandTil;
         skibandInfo.className = 'card-info';
       } else {
-        skibandCard.classList.remove('grønn');
-        skibandCard.classList.remove('rød');
+        skibandCard.classList.remove('grønn'); skibandCard.classList.remove('rød');
         gearWrap.classList.remove('spinning');
         skibandStat.style.color = '#aaa';
-        const minTilSkiband = toMin(skibandFra) - nowMin;
-        skibandStat.textContent = minTilSkiband > 0 ? 'Åpner om ' + formatTid(minTilSkiband) : 'Åpner ' + skibandFra;
+        skibandStat.textContent = 'Åpner om ' + formatTid(toMin(skibandFra) - nowMin);
         skibandInfo.textContent = skibandFra + ' – ' + skibandTil;
         skibandInfo.className = 'card-info';
       }
     }
 
     // --- UTLÅN ---
-    const utlanAktiv = document.getElementById('utlan-aktiv').checked;
-    const utlanFra   = document.getElementById('utlan-fra').value;
-    const utlanTil   = document.getElementById('utlan-til').value;
+    const utlanAktiv = !!utlan.aktiv;
+    const utlanFra   = utlan.fra || '10:00';
+    const utlanTil   = utlan.til || '19:00';
     const utlanCard  = document.getElementById('fs-utlan-card');
     const utlanStat  = document.getElementById('fs-utlan-status');
     const utlanInfo  = document.getElementById('fs-utlan-info');
 
     if (!utlanAktiv) {
-      utlanCard.classList.remove('grønn');
-      utlanCard.classList.add('rød');
-      utlanStat.style.color = '#ff5555';
-      utlanStat.textContent = 'Stengt';
-      utlanInfo.textContent = '';
-      utlanInfo.className = 'card-info';
+      utlanCard.classList.remove('grønn'); utlanCard.classList.add('rød');
+      utlanStat.style.color = '#ff5555'; utlanStat.textContent = 'Stengt';
+      utlanInfo.textContent = ''; utlanInfo.className = 'card-info';
     } else if (!bakkAapen) {
-      utlanCard.classList.remove('grønn');
-      utlanCard.classList.add('rød');
-      utlanStat.style.color = '#ff5555';
-      utlanStat.textContent = 'Stengt';
+      utlanCard.classList.remove('grønn'); utlanCard.classList.add('rød');
+      utlanStat.style.color = '#ff5555'; utlanStat.textContent = 'Stengt';
       const minTil = toMin(utlanFra) - nowMin;
       utlanInfo.textContent = minTil > 0 ? 'Åpner om ' + formatTid(minTil) : 'Åpner ' + utlanFra;
       utlanInfo.className = 'card-info nedtelling';
     } else {
-      const erAapen = nowMin >= toMin(utlanFra) && nowMin < toMin(utlanTil);
-      const utlanUtlopt = nowMin >= toMin(utlanTil);
+      const erAapen  = nowMin >= toMin(utlanFra) && nowMin < toMin(utlanTil);
+      const erUtlopt = nowMin >= toMin(utlanTil);
       if (erAapen) {
-        utlanCard.classList.add('grønn');
-        utlanCard.classList.remove('rød');
-        utlanStat.style.color = '#4cff91';
-        utlanStat.textContent = 'Åpent';
-        const minTilStenging = toMin(utlanTil) - nowMin;
-        utlanInfo.textContent = utlanFra + ' – ' + utlanTil + '  ·  Stenger om ' + formatTid(minTilStenging);
+        utlanCard.classList.add('grønn'); utlanCard.classList.remove('rød');
+        utlanStat.style.color = '#4cff91'; utlanStat.textContent = 'Åpent';
+        utlanInfo.textContent = utlanFra + ' – ' + utlanTil + '  ·  Stenger om ' + formatTid(toMin(utlanTil) - nowMin);
         utlanInfo.className = 'card-info grønn-tekst';
-      } else if (utlanUtlopt) {
-        utlanCard.classList.remove('grønn');
-        utlanCard.classList.add('rød');
-        utlanStat.style.color = '#ff5555';
-        utlanStat.textContent = 'Stengt';
+      } else if (erUtlopt) {
+        utlanCard.classList.remove('grønn'); utlanCard.classList.add('rød');
+        utlanStat.style.color = '#ff5555'; utlanStat.textContent = 'Stengt';
         utlanInfo.textContent = utlanFra + ' – ' + utlanTil;
         utlanInfo.className = 'card-info';
       } else {
-        utlanCard.classList.remove('grønn');
-        utlanCard.classList.remove('rød');
+        utlanCard.classList.remove('grønn'); utlanCard.classList.remove('rød');
         utlanStat.style.color = '#aaa';
-        const minTilUtlan = toMin(utlanFra) - nowMin;
-        utlanStat.textContent = minTilUtlan > 0 ? 'Åpner om ' + formatTid(minTilUtlan) : 'Åpner ' + utlanFra;
+        utlanStat.textContent = 'Åpner om ' + formatTid(toMin(utlanFra) - nowMin);
         utlanInfo.textContent = utlanFra + ' – ' + utlanTil;
         utlanInfo.className = 'card-info';
       }
     }
 
-    // --- Aktiviteter ---
-    const pagAktiv  = document.getElementById('pag-aktiv').checked;
-    const pagType   = document.getElementById('pag-type').value;
-    const pagFra    = document.getElementById('pag-fra').value;
-    const pagTil    = document.getElementById('pag-til').value;
-    const nesAktiv  = document.getElementById('nes-aktiv').checked;
-    const nesType   = document.getElementById('nes-type').value;
-    const nesFra    = document.getElementById('nes-fra').value;
-    const nesTol    = document.getElementById('nes-til').value;
-    const skibandAapen = skibandAktiv && nowMin >= toMin(skibandFra) && nowMin < toMin(skibandTil);
+    // --- AKTIVITETER ---
+    const pagAktiv = !!pagaende.aktiv;
+    const pagType  = pagaende.type || 'Alpint / Snowboard';
+    const pagFra   = pagaende.fra  || '10:00';
+    const pagTil   = pagaende.til  || '12:00';
+    const nesAktiv = !!neste.aktiv;
+    const nesType  = neste.type || 'Alpint / Snowboard';
+    const nesFra   = neste.fra  || '12:00';
+    const nesTol   = neste.til  || '14:00';
 
     const pagEl    = document.getElementById('fs-pagaende');
     const pagTidEl = document.getElementById('fs-pag-tid');
@@ -896,7 +881,6 @@
     const forbudt  = document.getElementById('fs-forbudt');
 
     if (!bakkAapen) {
-      // Bakken stengt
       forbudt.textContent = 'All aktivitet'; forbudt.style.color = '#ff5555';
       const stengtAkt = [];
       if (pagAktiv) stengtAkt.push({ type: pagType, fra: pagFra, til: pagTil });
@@ -925,15 +909,12 @@
         nesEl.textContent = 'Ingen aktivitet'; nesEl.style.color = '#ff5555';
         nesTidEl.textContent = ''; nesTidEl.className = 'card-info';
       }
-
     } else {
-      // Bakken åpen — pagCard viser alltid pagAktiv, nesCard viser alltid nesAktiv
-
       forbudt.textContent = ''; forbudt.style.color = '#aaa';
 
-      // --- Pågående kort ---
+      // Pågående
       if (pagAktiv) {
-        const pagIgang = nowMin >= toMin(pagFra) && nowMin < toMin(pagTil);
+        const pagIgang  = nowMin >= toMin(pagFra) && nowMin < toMin(pagTil);
         const pagKommer = nowMin < toMin(pagFra);
         if (pagIgang) {
           pagCard.classList.add('grønn');
@@ -943,8 +924,7 @@
         } else if (pagKommer) {
           pagCard.classList.remove('grønn');
           pagEl.textContent = pagType; pagEl.style.color = '#ff5555';
-          const m = toMin(pagFra) - nowMin;
-          pagTidEl.textContent = 'Starter om ' + formatTid(m);
+          pagTidEl.textContent = 'Starter om ' + formatTid(toMin(pagFra) - nowMin);
           pagTidEl.className = 'card-info nedtelling';
         } else {
           pagCard.classList.remove('grønn');
@@ -957,21 +937,19 @@
         pagTidEl.textContent = ''; pagTidEl.className = 'card-info';
       }
 
-      // --- Neste kort ---
+      // Neste
       if (nesAktiv) {
         const nesKommer = nowMin < toMin(nesFra);
-        const nesIgang = nowMin >= toMin(nesFra) && nowMin < toMin(nesTol);
+        const nesIgang  = nowMin >= toMin(nesFra) && nowMin < toMin(nesTol);
         nesCard.classList.remove('grønn');
         nesEl.textContent = nesType; nesEl.style.color = '#ff5555';
         if (nesKommer) {
-          const m = toMin(nesFra) - nowMin;
-          nesTidEl.textContent = 'Starter om ' + formatTid(m);
+          nesTidEl.textContent = 'Starter om ' + formatTid(toMin(nesFra) - nowMin);
           nesTidEl.className = 'card-info nedtelling';
         } else {
           nesTidEl.textContent = nesFra + ' – ' + nesTol;
           nesTidEl.className = 'card-info';
         }
-        // Neste er nådd sin tid — flytt til pågående
         if (nesIgang) {
           pagCard.classList.add('grønn');
           pagEl.textContent = nesType; pagEl.style.color = '#4cff91';
@@ -985,22 +963,18 @@
         nesEl.textContent = ''; nesTidEl.textContent = ''; nesTidEl.className = 'card-info';
       }
 
-      // --- Forbudt nå ---
+      // Forbudt nå
       const pagErGrønn = pagCard.classList.contains('grønn');
-      const aktivType = pagErGrønn ? pagEl.textContent : null;
+      const aktivType  = pagErGrønn ? pagEl.textContent : null;
       if (pagErGrønn && nesAktiv && nowMin < toMin(nesFra)) {
-        forbudt.textContent = nesType + ' ikke tillatt nå';
-        forbudt.style.color = '#ff5555';
+        forbudt.textContent = nesType + ' ikke tillatt nå'; forbudt.style.color = '#ff5555';
       } else if (pagErGrønn && aktivType === 'Aking') {
-        forbudt.textContent = 'Alpint / Snowboard ikke tillatt nå';
-        forbudt.style.color = '#ff5555';
-      } else if (pagErGrønn && aktivType === 'Alpint / Snowboard') {
-        forbudt.textContent = 'Aking ikke tillatt nå';
-        forbudt.style.color = '#ff5555';
+        forbudt.textContent = 'Alpint / Snowboard ikke tillatt nå'; forbudt.style.color = '#ff5555';
+      } else if (pagErGrønn && (aktivType === 'Alpint / Snowboard')) {
+        forbudt.textContent = 'Aking ikke tillatt nå'; forbudt.style.color = '#ff5555';
       }
     }
   }
-
 
 
   function velgBakke(el, farge) {
