@@ -532,6 +532,14 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script>
+  function lokalDatoISO(d) {
+    d = d || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return y + '-' + m + '-' + dd;
+  }
+
   const dagNavn  = ['Søndag','Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag'];
   const maaneder = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember'];
 
@@ -650,7 +658,7 @@
     // Neste apning on forside
     const datoAktiv = document.getElementById('dato-aktiv').checked;
     const nesteEl   = document.getElementById('neste-apning');
-    const nowDate   = new Date().toISOString().split('T')[0];
+    const nowDate   = lokalDatoISO();
     if (datoAktiv && datoVal > nowDate) {
       const msTo  = valgt - new Date();
       const dager = Math.floor(msTo / (1000*60*60*24));
@@ -689,17 +697,17 @@
   }
 
   // Init
-  document.getElementById('admin-dato').value = new Date().toISOString().split('T')[0];
+  document.getElementById('admin-dato').value = lokalDatoISO();
   oppdaterDato();
   // Start sanntidslytter for dagens dato
-  lyttPaaDato(new Date().toISOString().split('T')[0]);
+  lyttPaaDato(lokalDatoISO());
 
 
 
   function oppdaterKort() {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const todayISO  = now.toISOString().split('T')[0];
+    const todayISO  = lokalDatoISO(now);
     const adminDato = document.getElementById('admin-dato').value || '';
     const erRiktigDato = adminDato === todayISO;
     const bakkAapen = erRiktigDato && nowMin >= toMin('09:00') && nowMin < toMin('22:00');
