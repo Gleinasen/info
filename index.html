@@ -591,6 +591,7 @@
 
   function lesAdminSkjema() {
     return {
+      dato:     { verdi: document.getElementById('admin-dato').value, aktiv: document.getElementById('dato-aktiv').checked },
       bakke:    { farge: bakkeFarge, aktiv: document.getElementById('bakke-aktiv').checked },
       skiband:  { fra: document.getElementById('skiband-fra').value, til: document.getElementById('skiband-til').value, aktiv: document.getElementById('skiband-aktiv').checked },
       utlan:    { fra: document.getElementById('utlan-fra').value,   til: document.getElementById('utlan-til').value,   aktiv: document.getElementById('utlan-aktiv').checked },
@@ -601,6 +602,10 @@
 
   function fyllAdminSkjema(plan) {
     if (!plan) return;
+    if (plan.dato) {
+      document.getElementById('admin-dato').value = plan.dato.verdi || lokalDatoISO();
+      document.getElementById('dato-aktiv').checked = !!plan.dato.aktiv;
+    }
     if (plan.bakke) {
       bakkeFarge = plan.bakke.farge || 'grønn';
       document.querySelectorAll('.bakke-btn').forEach(b => b.classList.remove('selected'));
@@ -719,13 +724,16 @@
     const pagaende = p.pagaende || {};
     const neste    = p.neste    || {};
 
-    const adminDato    = document.getElementById('admin-dato').value || '';
-    const erRiktigDato = adminDato === todayISO;
+    // Les dato fra Firebase-plan (fungerer for alle enheter)
+    const datoData     = (gjeldenePlan && gjeldenePlan.dato) ? gjeldenePlan.dato : {};
+    const adminDato    = datoData.verdi || lokalDatoISO();
+    const datoAktiv    = !!datoData.aktiv;
+    const erRiktigDato = datoAktiv && adminDato === todayISO;
     const bakkAapen    = erRiktigDato && nowMin >= toMin('09:00') && nowMin < toMin('22:00');
 
     // Dato-visning i kort
     var datoVist = '';
-    if (adminDato) {
+    if (adminDato && datoAktiv) {
       var dd = new Date(adminDato + 'T12:00:00');
       var dkor = ['Son','Man','Tir','Ons','Tor','Fre','Lor'];
       datoVist = dkor[dd.getDay()] + ' ' + dd.getDate() + '.' + (dd.getMonth()+1) + '.' + dd.getFullYear();
