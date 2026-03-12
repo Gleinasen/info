@@ -561,11 +561,21 @@
   }
 
   // Lytter på endringer i sanntid — oppdaterer forsiden automatisk
+  let aktivLytterRef = null;
+  let aktivLytterDato = null;
+
   function lyttPaaDato(dato) {
-    db.ref('planer/' + dato).on('value', snap => {
+    if (aktivLytterDato === dato) return; // allerede lytter på denne datoen
+    if (aktivLytterRef) aktivLytterRef.off(); // fjern gammel lytter
+    aktivLytterRef = db.ref('planer/' + dato);
+    aktivLytterDato = dato;
+    aktivLytterRef.on('value', snap => {
       const plan = snap.val();
       if (plan) {
-        fyllAdminSkjema(plan);
+        // Fyll admin-skjema KUN hvis admin-siden er åpen
+        if (document.getElementById('page-admin').classList.contains('active')) {
+          fyllAdminSkjema(plan);
+        }
         oppdaterKort();
       }
     });
@@ -631,7 +641,8 @@
     const datStr = valgt.getDate() + '. ' + maaneder[valgt.getMonth()] + ' ' + valgt.getFullYear();
     document.getElementById('admin-dato-preview').textContent = dagStr + ' ' + datStr;
 
-    // Last inn lagret plan for denne datoen fra Firebase
+    // Bytt sanntidslytter til valgt dato og fyll admin-skjema
+    lyttPaaDato(datoVal);
     hentPlanForDato(datoVal, function(plan) {
       if (plan) fyllAdminSkjema(plan);
     });
@@ -673,9 +684,6 @@
     const now = new Date();
     document.getElementById('day').textContent  = dagNavn[now.getDay()];
     document.getElementById('date').textContent = now.getDate() + '. ' + maaneder[now.getMonth()] + ' ' + now.getFullYear();
-    // Lytt på dagens plan i sanntid fra Firebase
-    const todayISO = now.toISOString().split('T')[0];
-    lyttPaaDato(todayISO);
     oppdaterKort();
     oppdaterDato();
   }
